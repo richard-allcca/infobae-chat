@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   createConversation,
   formatRequestError,
@@ -35,6 +36,7 @@ export default function App() {
   const [statusLabel, setStatusLabel] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retryText, setRetryText] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const refreshList = useCallback(async () => {
     const list = await listConversations()
@@ -55,7 +57,20 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!sidebarOpen) return
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      setSidebarOpen(false)
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [sidebarOpen])
+
   async function handleNewChat() {
+    setSidebarOpen(false)
     if (streaming || loadingDetail) return
     setError(null)
     setRetryText(null)
@@ -71,6 +86,7 @@ export default function App() {
   }
 
   async function handleSelect(id: string) {
+    setSidebarOpen(false)
     if (streaming || loadingDetail || id === activeId) return
     setError(null)
     setRetryText(null)
@@ -199,6 +215,15 @@ export default function App() {
 
   const sidebarDisabled = streaming || loadingDetail
   const canRetry = retryText !== null
+  const appClassName = sidebarOpen ? 'app sidebar-open' : 'app'
+
+  function handleToggleSidebar() {
+    setSidebarOpen((open) => !open)
+  }
+
+  function handleCloseSidebar() {
+    setSidebarOpen(false)
+  }
 
   function handleNewChatClick() {
     void handleNewChat()
@@ -216,8 +241,17 @@ export default function App() {
     void handleRetry()
   }
 
+  function renderBackdrop(): ReactNode {
+    if (!sidebarOpen) return null
+
+    return (
+      <button type="button" className="backdrop" aria-label="Cerrar conversaciones" onClick={handleCloseSidebar} />
+    )
+  }
+
   return (
-    <div className="app">
+    <div className={appClassName}>
+      {renderBackdrop()}
       <Sidebar
         conversations={conversations}
         activeId={activeId}
@@ -233,6 +267,8 @@ export default function App() {
         statusLabel={statusLabel}
         error={error}
         canRetry={canRetry}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={handleToggleSidebar}
         onDraftChange={setDraft}
         onSend={handleSendClick}
         onRetry={handleRetryClick}

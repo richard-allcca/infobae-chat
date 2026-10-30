@@ -14,6 +14,8 @@ type ChatViewProps = {
   onSend: () => void
   onRetry: () => void
   canRetry: boolean
+  sidebarOpen: boolean
+  onToggleSidebar: () => void
 }
 
 export function ChatView({
@@ -27,6 +29,8 @@ export function ChatView({
   onSend,
   onRetry,
   canRetry,
+  sidebarOpen,
+  onToggleSidebar,
 }: ChatViewProps) {
   const threadRef = useRef<HTMLDivElement>(null)
   const canSend = draft.trim().length > 0 && !streaming && !loadingDetail
@@ -137,6 +141,22 @@ export function ChatView({
     )
   }
 
+  function renderMenu(): ReactNode {
+    const label = sidebarOpen ? 'Cerrar conversaciones' : 'Abrir conversaciones'
+
+    return (
+      <button
+        type="button"
+        className="menu"
+        aria-label={label}
+        aria-expanded={sidebarOpen}
+        onClick={onToggleSidebar}
+      >
+        <MenuIcon />
+      </button>
+    )
+  }
+
   function renderRetry(): ReactNode {
     if (!canRetry) return null
     return (
@@ -148,6 +168,7 @@ export function ChatView({
 
   return (
     <main className="chat">
+      {renderMenu()}
       <div className="thread" ref={threadRef}>
         {renderThread()}
       </div>
@@ -170,6 +191,15 @@ export function ChatView({
         </form>
       </div>
     </main>
+  )
+}
+
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 4v16" fill="none" stroke="currentColor" strokeWidth="2" />
+    </svg>
   )
 }
 
