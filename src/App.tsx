@@ -8,7 +8,7 @@ import {
 } from './api/chat'
 import { ChatView } from './components/ChatView'
 import { Sidebar } from './components/Sidebar'
-import type { ConversationSummary, Message } from './types'
+import type { ConversationSummary, Message, Source, StreamError } from './types'
 
 const knownStages: Record<string, string> = {
   searching: 'Buscando…',
@@ -103,13 +103,13 @@ export default function App() {
     let failed = false
     let started = false
     let thrown: unknown
-    try {
-      await sendMessage(conversationId, text, {
-        onStatus: (stage) => {
+
+    const handlers = {
+        onStatus: (stage: string) => {
           const label = knownStages[stage]
           if (label) setStatusLabel(label)
         },
-        onDelta: (chunk) => {
+        onDelta:  (chunk: string) => {
           started = true
           setMessages((current) =>
             current.map((message) =>
@@ -117,13 +117,13 @@ export default function App() {
             ),
           )
         },
-        onSources: (sources) => {
+        onSources: (sources: Source[]) => {
           started = true
           setMessages((current) =>
             current.map((message) => (message.id === assistant.id ? { ...message, sources } : message)),
           )
         },
-        onError: (streamError) => {
+        onError: (streamError: StreamError) => {
           failed = true
           setRetryText(text)
           setError(streamError.message)
@@ -131,7 +131,11 @@ export default function App() {
         onDone: () => {
           setStatusLabel(null)
         },
-      })
+      }
+
+    // Attempt to send the message with the provided handlers
+    try {
+      await sendMessage(conversationId, text, handlers)
       if (!failed) setRetryText(null)
     } catch (reason) {
       if (!started) {
@@ -142,6 +146,7 @@ export default function App() {
       thrown = reason
     }
 
+    // Refresh the conversation list after attempting to deliver the message
     try {
       await refreshList()
     } catch (reason) {
@@ -192,18 +197,33 @@ export default function App() {
     }
   }
 
+  const sidebarDisabled = streaming || loadingDetail
+  const canRetry = retryText !== null
+
+  function handleNewChatClick() {
+    void handleNewChat()
+  }
+
+  function handleSelectConversation(id: string) {
+    void handleSelect(id)
+  }
+
+  function handleSendClick() {
+    void handleSend()
+  }
+
+  function handleRetryClick() {
+    void handleRetry()
+  }
+
   return (
     <div className="app">
       <Sidebar
         conversations={conversations}
         activeId={activeId}
-        disabled={streaming || loadingDetail}
-        onNewChat={() => {
-          void handleNewChat()
-        }}
-        onSelect={(id) => {
-          void handleSelect(id)
-        }}
+        disabled={sidebarDisabled}
+        onNewChat={handleNewChatClick}
+        onSelect={handleSelectConversation}
       />
       <ChatView
         messages={messages}
@@ -212,14 +232,10 @@ export default function App() {
         loadingDetail={loadingDetail}
         statusLabel={statusLabel}
         error={error}
-        canRetry={retryText !== null}
+        canRetry={canRetry}
         onDraftChange={setDraft}
-        onSend={() => {
-          void handleSend()
-        }}
-        onRetry={() => {
-          void handleRetry()
-        }}
+        onSend={handleSendClick}
+        onRetry={handleRetryClick}
       />
     </div>
   )
