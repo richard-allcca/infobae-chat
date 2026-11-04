@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
-import type { Message, Source } from '../types'
+import type { Message } from '../../types'
+import { DebugActivity } from './DebugActivity'
+import { SourceCards } from './SourceCards'
+import './ChatView.css'
 
 type ChatViewProps = {
   messages: Message[]
@@ -66,16 +69,11 @@ export function ChatView({
   }
 
   function renderMessages(): ReactNode {
-    return (
-      <div className="messages">
-        {messages.map((message) => renderMessage(message))}
-      </div>
-    )
+    return <div className="messages">{messages.map((message) => renderMessage(message))}</div>
   }
 
   function renderMessage(message: Message): ReactNode {
-    const isPlaceholder = message.role === 'assistant' && !message.content && message.sources.length === 0
-    if (isPlaceholder) return null
+    if (!isVisibleMessage(message)) return null
 
     const className = `message ${message.role}`
 
@@ -93,12 +91,21 @@ export function ChatView({
   }
 
   function renderAssistantBody(message: Message): ReactNode {
-    return <div className="markdown">{renderAssistantMarkdown(message)}</div>
+    return (
+      <>
+        <DebugActivity activity={message.activity} collapsed={hasAnswer(message)} />
+        {renderAssistantMarkdown(message)}
+      </>
+    )
   }
 
   function renderAssistantMarkdown(message: Message): ReactNode {
     if (!message.content) return null
-    return <ReactMarkdown>{message.content}</ReactMarkdown>
+    return (
+      <div className="markdown">
+        <ReactMarkdown>{message.content}</ReactMarkdown>
+      </div>
+    )
   }
 
   function renderUserBody(message: Message): ReactNode {
@@ -106,24 +113,7 @@ export function ChatView({
   }
 
   function renderSources(message: Message): ReactNode {
-    if (message.sources.length === 0) return null
-    const linkedSources = message.sources.filter((source) => source.url)
-    return (
-      <ul className="sources">
-        {linkedSources.map((source) => renderSource(message.id, source))}
-      </ul>
-    )
-  }
-
-  function renderSource(messageId: string, source: Source): ReactNode {
-    const label = `${source.position}. ${source.title}`
-    return (
-      <li key={`${messageId}-${source.position}`}>
-        <a href={source.url} target="_blank" rel="noreferrer">
-          {label}
-        </a>
-      </li>
-    )
+    return <SourceCards messageId={message.id} sources={message.sources} />
   }
 
   function renderStatus(): ReactNode {
@@ -192,6 +182,15 @@ export function ChatView({
       </div>
     </main>
   )
+}
+
+function hasAnswer(message: Message): boolean {
+  return message.content.length > 0 || message.sources.length > 0
+}
+
+function isVisibleMessage(message: Message): boolean {
+  if (message.role !== 'assistant') return true
+  return message.content.length > 0 || message.sources.length > 0 || message.activity.length > 0
 }
 
 function MenuIcon() {

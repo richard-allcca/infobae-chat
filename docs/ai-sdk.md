@@ -19,9 +19,10 @@ Infobae hace tres cosas distintas:
 
 | Evento Infobae | Data | Equivalente en AI SDK |
 | --- | --- | --- |
-| `status` | `{"stage":"searching"}` o `{"stage":"reading"}` | No existe en el text stream. Habría que emitir un `data-status`. |
+| `status` | `{"stage":"thinking"}`, `{"stage":"searching"}` o `{"stage":"reading"}` | No existe en el text stream. Habría que emitir un `data-status`. |
 | `delta` | `{"text":"..."}` | `text-delta`, y el campo se llama `delta`, no `text`. |
-| `sources` | `{"sources":[...]}` sin `position` (el índice es la posición) | `source-url` por cada fuente. |
+| `sources` | `{"sources":[...]}` sin `position` (el índice es la posición). Cada fuente puede traer `image`. | `source-url` por cada fuente. |
+| `debug` | `reasoning`, `tool-call` o `tool-result`. Solo en dev y si el request manda `X-Debug: true`. | No forma parte del text stream. |
 | `error` | `{"code":"GENERATION_FAILED","message":"..."}` | `{"type":"error","errorText":"..."}`. |
 | `done` | `{}` | `finish` y después `data: [DONE]`. |
 

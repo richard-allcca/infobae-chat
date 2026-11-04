@@ -1,4 +1,4 @@
-import type { ConversationDetail, ConversationSummary, LimitError, Source, StreamError } from '../types'
+import type { ConversationDetail, ConversationSummary, DebugEvent, LimitError, Message, Source, StreamError } from '../types'
 
 const productId = import.meta.env.VITE_PRODUCT_ID
 const token = import.meta.env.VITE_API_TOKEN
@@ -19,6 +19,7 @@ export type SendHandlers = {
   onStatus?: (stage: string) => void
   onDelta?: (text: string) => void
   onSources?: (sources: Source[]) => void
+  onDebug?: (event: DebugEvent) => void
   onError?: (error: StreamError) => void
   onDone?: () => void
 }
@@ -55,14 +56,15 @@ export function createConversation(): Promise<ConversationSummary> {
   return request<ConversationSummary>('/conversations', { method: 'POST' })
 }
 
-export function getConversation(id: string): Promise<ConversationDetail> {
-  return request<ConversationDetail>(`/conversations/${encodeURIComponent(id)}`)
+export async function getConversation(id: string): Promise<ConversationDetail> {
+  const detail = await request<ConversationDetail>(`/conversations/${encodeURIComponent(id)}`)
+  return normalizeDetail(detail)
 }
 
 export async function sendMessage(id: string, text: string, handlers: SendHandlers): Promise<void> {
   const response = await fetch(endpoint(`/conversations/${encodeURIComponent(id)}/messages`), {
     method: 'POST',
-    headers: headers(true),
+    headers: { ...headers(true), 'X-Debug': 'true' },
     body: JSON.stringify({ text }),
   })
 
@@ -180,6 +182,12 @@ function dispatchEvent(block: string, handlers: SendHandlers): void {
     return
   }
 
+  if (eventName === 'debug') {
+    const event = readDebugEvent(data)
+    if (event) handlers.onDebug?.(event)
+    return
+  }
+
   if (eventName === 'error') {
     handlers.onError?.(readStreamError(data))
     return
@@ -219,8 +227,46 @@ function toSource(item: unknown, index: number): Source {
     publishedAt: typeof source.publishedAt === 'string' ? source.publishedAt : null,
     section: typeof source.section === 'string' ? source.section : null,
     author: typeof source.author === 'string' ? source.author : null,
+    image: typeof source.image === 'string' && source.image.trim() ? source.image : null,
     cited: source.cited === true,
   }
+}
+
+function normalizeDetail(detail: ConversationDetail): ConversationDetail {
+  if (!detail || typeof detail !== 'object') {
+    return { id: '', title: null, updatedAt: '', messages: [] }
+  }
+  const messages = Array.isArray(detail.messages) ? detail.messages.map(normalizeMessage) : []
+  return { ...detail, messages }
+}
+
+function normalizeMessage(message: Message): Message {
+  const sources = Array.isArray(message.sources) ? message.sources.map((source, index) => toSource(source, index)) : []
+  return {
+    ...message,
+    content: typeof message.content === 'string' ? message.content : '',
+    sources,
+    activity: [],
+  }
+}
+
+function readDebugEvent(data: unknown): DebugEvent | null {
+  if (!data || typeof data !== 'object' || !('kind' in data)) return null
+  const record = data as Record<string, unknown>
+
+  if (record.kind === 'reasoning' && typeof record.text === 'string') {
+    return { kind: 'reasoning', text: record.text }
+  }
+
+  if (record.kind === 'tool-call' && typeof record.toolCallId === 'string' && typeof record.toolName === 'string') {
+    return { kind: 'tool-call', toolCallId: record.toolCallId, toolName: record.toolName, input: record.input ?? null }
+  }
+
+  if (record.kind === 'tool-result' && typeof record.toolCallId === 'string' && typeof record.toolName === 'string') {
+    return { kind: 'tool-result', toolCallId: record.toolCallId, toolName: record.toolName, output: record.output ?? null }
+  }
+
+  return null
 }
 
 function readStreamError(data: unknown): StreamError {

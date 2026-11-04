@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import type { ConversationSummary } from '../types'
+import type { ConversationSummary } from '../../types'
+import './Sidebar.css'
 
 type SidebarProps = {
   conversations: ConversationSummary[]
@@ -7,9 +8,10 @@ type SidebarProps = {
   disabled: boolean
   onNewChat: () => void
   onSelect: (id: string) => void
+  onLogout: () => void
 }
 
-export function Sidebar({ conversations, activeId, disabled, onNewChat, onSelect }: SidebarProps) {
+export function Sidebar({ conversations, activeId, disabled, onNewChat, onSelect, onLogout }: SidebarProps) {
   function handleSelect(id: string) {
     onSelect(id)
   }
@@ -43,6 +45,14 @@ export function Sidebar({ conversations, activeId, disabled, onNewChat, onSelect
     )
   }
 
+  function renderLogout(): ReactNode {
+    return (
+      <button type="button" className="sidebar-logout" onClick={onLogout} disabled={disabled}>
+        Cerrar sesión
+      </button>
+    )
+  }
+
   return (
     <aside className="sidebar">
       <button type="button" className="new-chat" onClick={onNewChat} disabled={disabled}>
@@ -53,6 +63,7 @@ export function Sidebar({ conversations, activeId, disabled, onNewChat, onSelect
         {renderEmpty()}
         {renderConversations()}
       </section>
+      {renderLogout()}
     </aside>
   )
 }

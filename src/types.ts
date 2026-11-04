@@ -12,8 +12,28 @@ export type Source = {
   publishedAt: string | null
   section: string | null
   author: string | null
+  image: string | null
   cited: boolean
 }
+
+export type ToolActivityStatus = 'running' | 'completed'
+
+export type ToolActivity = {
+  toolCallId: string
+  toolName: string
+  input: unknown
+  output: unknown | null
+  status: ToolActivityStatus
+}
+
+export type ActivityItem =
+  | { kind: 'reasoning'; text: string }
+  | { kind: 'tool'; tool: ToolActivity }
+
+export type DebugEvent =
+  | { kind: 'reasoning'; text: string }
+  | { kind: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
+  | { kind: 'tool-result'; toolCallId: string; toolName: string; output: unknown }
 
 export type Message = {
   id: string
@@ -21,6 +41,7 @@ export type Message = {
   content: string
   createdAt: string
   sources: Source[]
+  activity: ActivityItem[]
 }
 
 export type ConversationDetail = ConversationSummary & {

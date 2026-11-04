@@ -1,0 +1,33 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #000;
+  color: #ececec;
+
+  @media (min-width: 769px) {
+    flex-direction: row;
+  }
+
+  &.sidebar-open .sidebar {
+    transform: translateX(0);
+    visibility: visible;
+
+    @media (min-width: 769px) {
+      transform: none;
+    }
+  }
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 0.55);
+
+  @media (min-width: 769px) {
+    display: none;
+  }
+}

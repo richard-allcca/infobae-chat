@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import { applyDebugEvent } from './activity'
 import {
   createConversation,
   formatRequestError,
@@ -7,11 +8,16 @@ import {
   listConversations,
   sendMessage,
 } from './api/chat'
-import { ChatView } from './components/ChatView'
-import { Sidebar } from './components/Sidebar'
-import type { ConversationSummary, Message, Source, StreamError } from './types'
+import { clearSession, createSession, matchesCredentials, readSession, saveSession } from './auth/session'
+import type { Session } from './auth/session'
+import { ChatView } from './components/ChatView/ChatView'
+import { LoginView } from './components/LoginView/LoginView'
+import { Sidebar } from './components/Sidebar/Sidebar'
+import type { ConversationSummary, DebugEvent, Message, Source, StreamError } from './types'
+import './App.css'
 
 const knownStages: Record<string, string> = {
+  thinking: 'Pensando…',
   searching: 'Buscando…',
   reading: 'Leyendo…',
 }
@@ -23,10 +29,13 @@ function localMessage(role: Message['role'], content: string): Message {
     content,
     createdAt: new Date().toISOString(),
     sources: [],
+    activity: [],
   }
 }
 
 export default function App() {
+  const [session, setSession] = useState<Session | null>(() => readSession())
+  const [loginError, setLoginError] = useState<string | null>(null)
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -44,6 +53,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!session) return
+
     let cancelled = false
     listConversations()
       .then((list) => {
@@ -55,7 +66,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [session])
 
   useEffect(() => {
     if (!sidebarOpen) return
@@ -68,6 +79,35 @@ export default function App() {
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
   }, [sidebarOpen])
+
+  function handleLogin(email: string, password: string) {
+    if (!matchesCredentials(email, password)) {
+      setLoginError('Correo o contraseña incorrectos.')
+      return
+    }
+    const next = createSession(email)
+    saveSession(next)
+    setLoginError(null)
+    setSession(next)
+  }
+
+  function handleLoginEdit() {
+    setLoginError(null)
+  }
+
+  function handleLogout() {
+    clearSession()
+    setSession(null)
+    setLoginError(null)
+    setConversations([])
+    setActiveId(null)
+    setMessages([])
+    setDraft('')
+    setError(null)
+    setRetryText(null)
+    setStatusLabel(null)
+    setSidebarOpen(false)
+  }
 
   async function handleNewChat() {
     setSidebarOpen(false)
@@ -121,48 +161,52 @@ export default function App() {
     let thrown: unknown
 
     const handlers = {
-        onStatus: (stage: string) => {
-          const label = knownStages[stage]
-          if (label) setStatusLabel(label)
-        },
-        onDelta:  (chunk: string) => {
-          started = true
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistant.id ? { ...message, content: message.content + chunk } : message,
-            ),
-          )
-        },
-        onSources: (sources: Source[]) => {
-          started = true
-          setMessages((current) =>
-            current.map((message) => (message.id === assistant.id ? { ...message, sources } : message)),
-          )
-        },
-        onError: (streamError: StreamError) => {
-          failed = true
-          setRetryText(text)
-          setError(streamError.message)
-        },
-        onDone: () => {
-          setStatusLabel(null)
-        },
-      }
+      onStatus: (stage: string) => {
+        const label = knownStages[stage]
+        if (label) setStatusLabel(label)
+      },
+      onDelta: (chunk: string) => {
+        started = true
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistant.id ? { ...message, content: message.content + chunk } : message,
+          ),
+        )
+      },
+      onSources: (sources: Source[]) => {
+        started = true
+        setMessages((current) =>
+          current.map((message) => (message.id === assistant.id ? { ...message, sources } : message)),
+        )
+      },
+      onDebug: (event: DebugEvent) => {
+        started = true
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistant.id ? { ...message, activity: applyDebugEvent(message.activity, event) } : message,
+          ),
+        )
+      },
+      onError: (streamError: StreamError) => {
+        failed = true
+        setRetryText(text)
+        setError(streamError.message)
+      },
+      onDone: () => {
+        setStatusLabel(null)
+      },
+    }
 
-    // Attempt to send the message with the provided handlers
     try {
       await sendMessage(conversationId, text, handlers)
       if (!failed) setRetryText(null)
     } catch (reason) {
       if (!started) {
-        setMessages((current) =>
-          current.filter((message) => message.id !== assistant.id && message.id !== user?.id),
-        )
+        setMessages((current) => current.filter((message) => message.id !== assistant.id && message.id !== user?.id))
       }
       thrown = reason
     }
 
-    // Refresh the conversation list after attempting to deliver the message
     try {
       await refreshList()
     } catch (reason) {
@@ -241,6 +285,10 @@ export default function App() {
     void handleRetry()
   }
 
+  function handleLogoutClick() {
+    handleLogout()
+  }
+
   function renderBackdrop(): ReactNode {
     if (!sidebarOpen) return null
 
@@ -249,30 +297,44 @@ export default function App() {
     )
   }
 
-  return (
-    <div className={appClassName}>
-      {renderBackdrop()}
-      <Sidebar
-        conversations={conversations}
-        activeId={activeId}
-        disabled={sidebarDisabled}
-        onNewChat={handleNewChatClick}
-        onSelect={handleSelectConversation}
-      />
-      <ChatView
-        messages={messages}
-        draft={draft}
-        streaming={streaming}
-        loadingDetail={loadingDetail}
-        statusLabel={statusLabel}
-        error={error}
-        canRetry={canRetry}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={handleToggleSidebar}
-        onDraftChange={setDraft}
-        onSend={handleSendClick}
-        onRetry={handleRetryClick}
-      />
-    </div>
-  )
+  function renderLogin(): ReactNode {
+    return <LoginView error={loginError} onEdit={handleLoginEdit} onSubmit={handleLogin} />
+  }
+
+  function renderChat(): ReactNode {
+    return (
+      <div className={appClassName}>
+        {renderBackdrop()}
+        <Sidebar
+          conversations={conversations}
+          activeId={activeId}
+          disabled={sidebarDisabled}
+          onNewChat={handleNewChatClick}
+          onSelect={handleSelectConversation}
+          onLogout={handleLogoutClick}
+        />
+        <ChatView
+          messages={messages}
+          draft={draft}
+          streaming={streaming}
+          loadingDetail={loadingDetail}
+          statusLabel={statusLabel}
+          error={error}
+          canRetry={canRetry}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={handleToggleSidebar}
+          onDraftChange={setDraft}
+          onSend={handleSendClick}
+          onRetry={handleRetryClick}
+        />
+      </div>
+    )
+  }
+
+  function renderScreen(): ReactNode {
+    if (!session) return renderLogin()
+    return renderChat()
+  }
+
+  return renderScreen()
 }
